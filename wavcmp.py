@@ -41,7 +41,10 @@ class File:
                 rate = int(s.get("sample_rate"))
                 duration = int(s.get("duration_ts"))
             elif s.get("codec_type") == "video":
-                return
+                if s.get("disposition", {}).get("attached_pic"): # cover art
+                    pass
+                else:
+                    return
         if rate is None:
             return
 
