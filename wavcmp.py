@@ -40,10 +40,8 @@ class File:
                     return
                 rate = int(s["sample_rate"])
                 tsn, tsd = map(int, s["time_base"].split("/"))
-                duration, rem = divmod(int(s["duration_ts"]) * rate * tsn, tsd)
-                if rem:
-                    raise RuntimeError("Probed fractional duration of file: "
-                                       "'{}'".format(filename))
+                duration = int(s["duration_ts"]) * rate * tsn // tsd
+                # remainder discarded, this is inaccurate anyway
             elif s.get("codec_type") == "video":
                 if s.get("disposition", {}).get("attached_pic"): # cover art
                     pass
@@ -65,8 +63,10 @@ class Track(File):
         return self._rate
 
     def duration(self):
-        """Returns length of track."""
+        """Returns probed length of track."""
         return self._duration
+
+    duration_accuracy = 5 # +/- seconds
 
     def _load_data(self):
         with tempfile.NamedTemporaryFile(suffix=".wav") as temp:
@@ -80,7 +80,10 @@ class Track(File):
                 # as ffmpeg always outputs it
                 rate, data = scipy.io.wavfile.read(temp.name)
 
-        if rate != self.rate() or data.shape != (self.duration(), 2):
+        assert data.ndim == 2
+        if rate != self.rate() or data.shape[1] != 2 or \
+                abs(data.shape[0] - self.duration()) > \
+                self.duration_accuracy * rate:
             raise RuntimeError(
                 "Data didn't match probe on file: '{}'".format(self.filename()))
         assert data.dtype == np.int16
@@ -316,7 +319,8 @@ def cmp(a_track, b_track, offset=None, threshold=None):
 
     # Offset basically means ignored padding at the front in one of the tracks,
     # also limits padding at the back.
-    if abs(a_track.duration() - b_track.duration()) > 2 * max_offset:
+    if abs(a_track.duration() - b_track.duration()) > \
+            2 * max_offset + 2 * Track.duration_accuracy * a_track.rate():
         return
 
     a = a_track.data_wider()
