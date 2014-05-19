@@ -38,8 +38,12 @@ class File:
                     return
                 if rate is not None:
                     return
-                rate = int(s.get("sample_rate"))
-                duration = int(s.get("duration_ts"))
+                rate = int(s["sample_rate"])
+                tsn, tsd = map(int, s["time_base"].split("/"))
+                duration, rem = divmod(int(s["duration_ts"]) * rate * tsn, tsd)
+                if rem:
+                    raise RuntimeError("Probed fractional duration of file: "
+                                       "'{}'".format(filename))
             elif s.get("codec_type") == "video":
                 if s.get("disposition", {}).get("attached_pic"): # cover art
                     pass
