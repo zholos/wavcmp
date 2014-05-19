@@ -336,7 +336,7 @@ def cmp(a_track, b_track, offset=None, threshold=None):
     total = min(a.size, b.size) # fixed denominator regardless of overlap
     limit = int(Track.data_high * total * threshold) # absolute threshold
 
-    matches = [(limit, None)] # [pairs of (sad, offset)]
+    matches = [(limit // 2, None)] # [pairs of (SAD, offset)]
     _cmp_right(b, a, max_offset, matches)
     # mirror; remove 0 offset from first call, second call will add it again
     matches = [(ds, -offset if offset else None) for ds, offset in matches]
