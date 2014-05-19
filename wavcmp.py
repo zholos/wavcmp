@@ -127,6 +127,11 @@ def _duration(samples, rate):
     return f.format(s // 3600, s // 60 % 60, s % 60,
                     samples % rate * 1000 // rate)
 
+def _sum(a):
+    # int64 should be sufficient for int32 data
+    # convert to long int to avoid overflow later
+    return int(np.sum(a, dtype=np.int64))
+
 class Segment:
     """For display purposes, the two tracks are split into segments, which can
     either be a common segment or a padding segment on either end. Statistics
@@ -149,14 +154,14 @@ class Segment:
 
     def ds(self):
         """Computes MAD."""
-        return np.sum(np.abs(self.ac - self.bc))
+        return _sum(np.abs(self.ac - self.bc))
 
     def ds_str(self):
         return _small(self.ds(), self.total * Track.data_high)
 
     def zs(self):
         """Computes number of different samples."""
-        return np.sum(self.ac != self.bc)
+        return _sum(self.ac != self.bc)
 
     def zs_str(self):
         return _small(self.zs(), self.total, digits=5)
@@ -169,8 +174,8 @@ class Segment:
         i = self.ac != self.bc
         aci = self.ac[i]
         bci = self.bc[i]
-        ctn = np.sum(np.abs(aci)-np.abs(bci))
-        ctd = np.sum(np.abs(aci)+np.abs(bci))
+        ctn = _sum(np.abs(aci)-np.abs(bci))
+        ctd = _sum(np.abs(aci)+np.abs(bci))
         name = "a" if ctn >= 0 else "b"
         return "{} by {}".format(_small(abs(ctn), ctd), name)
 
@@ -251,8 +256,7 @@ def _limited_ds(ac, bc, limit):
         i = (a * i + c) % len(off)
         ax = ac[off[i]:off[i]+step]
         bx = bc[off[i]:off[i]+step]
-        # int64 should be sufficient for int32 data
-        s += np.sum(np.abs(ax-bx), dtype=np.int64)
+        s += _sum(np.abs(ax-bx))
         if s > limit:
             return
     return s
