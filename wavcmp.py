@@ -268,8 +268,9 @@ class Match:
 
 
 def _group_sums(a, group):
+    assert a.ndim == 1
     a = a[:len(a)//group*group]
-    return np.sum(a.reshape((len(a)//group, group) + a.shape[1:]), axis=1,
+    return np.sum(a.reshape((len(a)//group, group)), axis=1,
                   dtype=a.dtype) # dtype defaults to int64 on 64-bit machine
 
 def _limited_ds(ac, bc, limit):
@@ -307,11 +308,15 @@ def _cmp_right(a, b, max_offset, matches):
     def limit():
         return matches[0][0] * 2
 
+    # combine channels for grouping since they are correlated anyway
+    am = np.sum(a, axis=1, dtype=a.dtype)
+    bm = np.sum(b, axis=1, dtype=b.dtype)
+
     group = 7 # best value probably depends on cache size and track frequencies
-    bg = _group_sums(b, group)
+    bg = _group_sums(bm, group)
 
     for shift in xrange(group):
-        ag = _group_sums(a[shift:], group)
+        ag = _group_sums(am[shift:], group)
 
         for offset in xrange(shift, max_offset+1, group):
             # TODO: adjust range to conditions instead of checking every loop
