@@ -21,7 +21,7 @@ class File:
         out, _ = process.communicate()
         ret = process.wait()
         # Assume that if ffprobe worked correctly, we get a valid JSON object
-        # with either "streams" (valid Track) or "errors" (keep as File).
+        # with either "streams" (valid Track) or "error" (keep as File).
         try:
             probe = json.loads(out)
             if ret if "streams" in probe else "error" not in probe:
@@ -153,7 +153,7 @@ class Segment:
             return "common"
 
     def ds(self):
-        """Computes MAD."""
+        """Computes difference metric."""
         return _sum(np.abs(self.ac - self.bc))
 
     def ds_str(self):
@@ -305,7 +305,7 @@ def _cmp_right(a, b, max_offset, matches):
 def cmp(a_track, b_track, offset=None, threshold=None):
     """Compare two tracks at different offsets and yields good matches.
 
-    The closeness metric is the sum of absolute differences (SAD) over the
+    The difference metric is the sum of absolute differences (SAD) over the
     common part. A match is a particular offset at which this metric is below a
     certain absolute threshold. There may be multiple good matches. The first
     returned match has the lowest metric, the rest are ordered and their metrics
