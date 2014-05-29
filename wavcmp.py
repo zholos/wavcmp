@@ -159,8 +159,7 @@ class Segment:
     def share_str(self):
         """Computes a measure of contribution to discrepancies by one or the
         other track."""
-        if self.padding:
-            return
+        assert not self.padding
         i = self.ac != self.bc
         aci = self.ac[i]
         bci = self.bc[i]
@@ -174,12 +173,21 @@ class Segment:
 
     def format(self, verbose=False):
         if verbose:
-            f = "  {0}: {1} ({2} samples), {3} MAD, {4} non-zero" + \
-                ("" if self.padding else ", {5}")
+            f = "  {0}: {1} ({2} samples)"
+        elif self.padding:
+            f = "{0}: {1} ({2})"
         else:
-            f = "{0}: {1}" + (" ({2})" if self.padding else "") + ", {3} {4}"
-        return f.format(self.name(), self.duration_str(), len(self.ac),
-                        self.ds_str(), self.zs_str(), self.share_str())
+            f = "{0}: {1}"
+        s = f.format(self.name(), self.duration_str(), len(self.ac))
+        if verbose:
+            f = ", {0} MAD, {1} non-zero"
+        else:
+            f = ", {0} {1}"
+        s += f.format(self.ds_str(), self.zs_str())
+        if verbose and not self.padding:
+            f = ", {0}"
+            s += f.format(self.share_str())
+        return s
 
 class Match:
     """Match details."""
