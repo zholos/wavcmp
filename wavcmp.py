@@ -140,6 +140,12 @@ class Segment:
         self.padding = padding
         assert padding in (None, "-", "+")
 
+    def classify(self):
+        if not np.any(self.ac) and not np.any(self.bc):
+            return "silence"
+        elif np.all(self.ac == self.bc):
+            return "identical"
+
     def ds(self):
         """Computes difference metric."""
         return _sum(np.abs(self.ac - self.bc))
@@ -176,14 +182,18 @@ class Segment:
         else:
             f = "{0}{1}"
         s = f.format(self.padding or "", self.duration_str(), len(self.ac))
-        if verbose:
-            f = ", {0} MAD, {1} non-zero"
+        classify = verbose and self.classify()
+        if classify:
+            s += ", {}".format(classify)
         else:
-            f = ", {0} {1}"
-        s += f.format(self.ds_str(), self.zs_str())
-        if verbose and not self.padding:
-            f = ", {0} share"
-            s += f.format(self.share_str())
+            if verbose:
+                f = ", {0} MAD, {1} non-zero"
+            else:
+                f = ", {0} {1}"
+            s += f.format(self.ds_str(), self.zs_str())
+            if verbose and not self.padding:
+                f = ", {0} share"
+                s += f.format(self.share_str())
         return s
 
 class Match:
