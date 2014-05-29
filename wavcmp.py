@@ -125,6 +125,17 @@ def _sum(a):
     # convert to long int to avoid overflow later
     return int(np.sum(a, dtype=np.int64))
 
+def _spectrum(a):
+    a = np.mean(a, axis=1, dtype=np.float_) / Track.data_high
+    window = 8192 # should be a power of 2
+    a.resize(-(-len(a)//window)*window) # pad with zeroes
+    s = np.fft.fft(a.reshape((-1, window)))
+    s = np.mean(np.abs(s[...,:window//2])**2, axis=0)/window**2
+    s[1:] *= 2 # combine positive and negative frequencies (skip 0)
+    # Audacity further multiplies this by 2 to normalize power, and implicitly
+    # by another 4 because the input signal is taken as the sum of two channels
+    return s
+
 class Segment:
     """For display purposes, the two tracks are split into segments, which can
     either be a common segment or a padding segment on either end. Statistics
@@ -171,6 +182,17 @@ class Segment:
         sd = _sum(np.abs(bci)+np.abs(aci))
         return _small(sn, sd, sign=True)
 
+    def cutoff_str(self):
+        assert not self.padding
+        asc = np.cumsum(_spectrum(self.ac)[::-1])[::-1]
+        bsc = np.cumsum(_spectrum(self.bc)[::-1])[::-1]
+        db = 10*(np.log10(bsc)-np.log10(asc))
+        gain = np.argmax(db)
+        drop = np.argmin(db)
+        i = drop if -db[drop] > db[gain] else gain
+        freq = self.rate * max(0, i-.5) / (2.*len(db))
+        return "{:+.1f} dB >{:.1f} kHz".format(db[i], freq/1000)
+
     def duration_str(self):
         return _duration(len(self.ac), self.rate)
 
@@ -192,8 +214,8 @@ class Segment:
                 f = ", {0} {1}"
             s += f.format(self.ds_str(), self.zs_str())
             if verbose and not self.padding:
-                f = ", {0} share"
-                s += f.format(self.share_str())
+                f = ", {0} share, {1}"
+                s += f.format(self.share_str(), self.cutoff_str())
         return s
 
 class Match:
