@@ -12,7 +12,7 @@ class File:
     """
 
     def __init__(self, filename):
-        self._filename = filename
+        self.filename = filename
 
         process = subprocess.Popen(
             ["ffprobe", "-v", "quiet", "-i", filename,
@@ -51,27 +51,17 @@ class File:
             return
 
         self.__class__ = Track
-        self._rate = rate
-        self._duration = duration # not "size", could mean duration * channels
-
-    def filename(self):
-        return self._filename
+        self.rate = rate
+        self.duration = duration # not "size", could mean duration * channels
 
 class Track(File):
-    def rate(self):
-        """Returns sample rate."""
-        return self._rate
-
-    def duration(self):
-        """Returns probed length of track."""
-        return self._duration
-
+    # Probed duration may be inaccurate.
     duration_accuracy = 5 # +/- seconds
 
     def _load_data(self):
         with tempfile.NamedTemporaryFile(suffix=".wav") as temp:
             subprocess.check_call(
-                ["ffmpeg", "-v", "quiet", "-i", self.filename(),
+                ["ffmpeg", "-v", "quiet", "-i", self.filename,
                     "-f", "wav", "-y", temp.name],
                 stdin=open(os.devnull, "r"))
             with warnings.catch_warnings():
@@ -81,11 +71,11 @@ class Track(File):
                 rate, data = scipy.io.wavfile.read(temp.name)
 
         assert data.ndim == 2
-        if rate != self.rate() or data.shape[1] != 2 or \
-                abs(data.shape[0] - self.duration()) > \
+        if rate != self.rate or data.shape[1] != 2 or \
+                abs(data.shape[0] - self.duration) > \
                 self.duration_accuracy * rate:
             raise RuntimeError(
-                "Data didn't match probe on file: '{}'".format(self.filename()))
+                "Data didn't match probe on file: '{}'".format(self.filename))
         assert data.dtype == np.int16
         self._data = data
 
@@ -208,14 +198,14 @@ class Match:
         for i, (ac, bc) in enumerate(zip(acs, bcs)):
             if i == 1:
                 assert len(ac) == len(bc)
-                yield Segment(ac, bc, self.a.rate(),
+                yield Segment(ac, bc, self.a.rate,
                               min(a.size, b.size)) # matches total in cmp
             elif len(ac):
                 assert not len(bc)
                 # careful with np.zeros type
-                yield Segment(ac, ac*0, self.a.rate(), ac.size, only_in="a")
+                yield Segment(ac, ac*0, self.a.rate, ac.size, only_in="a")
             elif len(bc):
-                yield Segment(bc*0, bc, self.a.rate(), bc.size, only_in="b")
+                yield Segment(bc*0, bc, self.a.rate, bc.size, only_in="b")
 
     def common(self):
         for segment in self.segments():
@@ -231,7 +221,7 @@ class Match:
 
     def show(self, verbose=False):
         if verbose:
-            print(self.a.filename(), "~", self.b.filename())
+            print(self.a.filename, "~", self.b.filename)
         print(*(s.format(verbose=verbose) for s in self.segments()),
               sep=("\n" if verbose else " | "))
 
@@ -315,16 +305,16 @@ def cmp(a_track, b_track, offset=None, threshold=None):
     matches.
     """
 
-    assert a_track.rate() == b_track.rate()
+    assert a_track.rate == b_track.rate
 
     if offset is None:
         offset = 5
-    max_offset = -int(-a_track.rate()*offset)
+    max_offset = -int(-a_track.rate*offset)
 
     # Offset basically means ignored padding at the front in one of the tracks,
     # also limits padding at the back.
-    if abs(a_track.duration() - b_track.duration()) > \
-            2 * max_offset + 2 * Track.duration_accuracy * a_track.rate():
+    if abs(a_track.duration - b_track.duration) > \
+            2 * max_offset + 2 * Track.duration_accuracy * a_track.rate:
         return
 
     a = a_track.data_wider()
@@ -384,14 +374,14 @@ def main():
                 return False
             else:
                 raise RuntimeError(
-                    "Not an audio file: '{}'".format(i.filename()))
-    if a.rate() != b.rate():
+                    "Not an audio file: '{}'".format(i.filename))
+    if a.rate != b.rate:
         if args.s:
             return False
         else:
             raise RuntimeError(
                 "Sample rates different in files: '{}' and '{}'".format(
-                    a.filename(), b.filename()))
+                    a.filename, b.filename))
     matches = list(cmp(a, b, offset=args.o,
                        threshold=None if args.t is None else args.t/100.))
 
