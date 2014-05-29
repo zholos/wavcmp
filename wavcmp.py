@@ -275,22 +275,24 @@ def _group_sums(a, group):
 
 def _limited_ds(ac, bc, limit):
     assert len(ac) == len(bc)
-    step = 1<<13 # chosen empirically
-    s = 0
-
     # iterate over chunks pseudo-randomly so less likely to keep summing silence
-    off = xrange(0, len(ac), step)
-    i = 0
-    a = len(off) * 4 + 1 # Full-period theorem
+    step = 1<<13 # chosen empirically
+    n = -(-len(ac) // step)
+    a = n * 4 + 1 # Full-period theorem
     c = 2305843009213693951 # Mersenne prime
-    assert len(off) % c # choose a larger prime c if this limit is ever reached
-    for _ in off:
-        i = (a * i + c) % len(off)
-        ax = ac[off[i]:off[i]+step]
-        bx = bc[off[i]:off[i]+step]
+    assert n % c # choose a larger prime c if this limit is ever reached
+    s = 0
+    i = 0
+    while True:
+        i = (a * i + c) % n
+        off = i * step
+        ax = ac[off:off+step]
+        bx = bc[off:off+step]
         s += _sum(np.abs(ax-bx))
         if s > limit:
             return
+        if i == 0:
+            break
     return s
 
 def _cmp_right(a, b, max_offset, matches):
