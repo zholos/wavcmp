@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import bisect, sys, os, tempfile, subprocess, json, warnings, argparse
+import sys, os, argparse, tempfile, subprocess, json, warnings, bisect
 import scipy.io.wavfile
 import numpy as np
 
