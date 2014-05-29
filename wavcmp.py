@@ -28,19 +28,21 @@ class File:
         # with either "streams" (valid Track) or "error" (keep as File).
         try:
             probe = json.loads(out)
-            if ret if "streams" in probe else "error" not in probe:
-                raise ValueError
         except ValueError:
+            probe = {}
+        if "error" in probe: # ret != 0 in this case
+            return
+        if not (ret == 0 and "streams" in probe):
             raise RuntimeError("ffprobe failed on file: '{}'".format(filename))
 
         # To qualify as a track, the file must have one audio stream with
         # 2 channels and no video streams.
         rate = None
-        for s in probe.get("streams") or ():
+        for s in probe["streams"]:
             if s.get("codec_type") == "audio":
-                if s.get("channels") != 2:
+                if s["channels"] != 2:
                     return
-                if rate is not None:
+                if rate is not None: # second audio stream
                     return
                 rate = int(s["sample_rate"])
                 tsn, tsd = map(int, s["time_base"].split("/"))
