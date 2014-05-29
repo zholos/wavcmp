@@ -214,7 +214,7 @@ class Match:
             if i == 1:
                 assert len(ac) == len(bc)
                 yield Segment(ac, bc, self.a.rate,
-                              min(a.size, b.size)) # matches total in cmp
+                              min(a.size, b.size)) # matches total in cmp_track
             elif len(ac):
                 assert not len(bc)
                 # careful with np.zeros type
@@ -307,7 +307,7 @@ def _cmp_right(a, b, max_offset, matches):
                     while matches[-1][0] > limit(): # make sure to keep ds=0
                         matches.pop()
 
-def cmp(a_track, b_track, offset=None, threshold=None):
+def cmp_track(a, b, offset=None, threshold=None):
     """Compare two tracks at different offsets and yields good matches.
 
     The difference metric is the sum of absolute differences (SAD) over the
@@ -320,35 +320,35 @@ def cmp(a_track, b_track, offset=None, threshold=None):
     matches.
     """
 
-    assert a_track.rate == b_track.rate
+    assert a.rate == b.rate
 
     if offset is None:
         offset = 5
-    max_offset = -int(-a_track.rate*offset)
+    max_offset = -int(-a.rate*offset)
 
     # Offset basically means ignored padding at the front in one of the tracks,
     # also limits padding at the back.
-    if abs(a_track.duration - b_track.duration) > \
-            2 * max_offset + 2 * Track.duration_accuracy * a_track.rate:
+    if abs(a.duration - b.duration) > \
+            2 * max_offset + 2 * a.duration_accuracy * a.rate:
         return
 
-    a = a_track.data_wider()
-    b = b_track.data_wider()
+    ax = a.data_wider()
+    bx = b.data_wider()
 
     if threshold is None:
         # -V 1 MP3 should just clear 1%, -b 320 should also
         threshold = 0.01
-    total = min(a.size, b.size) # fixed denominator regardless of overlap
-    limit = int(Track.data_high * total * threshold) # absolute threshold
+    total = min(ax.size, bx.size) # fixed denominator regardless of overlap
+    limit = int(a.data_high * total * threshold) # absolute threshold
 
     matches = [(limit // 2, None)] # [pairs of (SAD, offset)]
-    _cmp_right(b, a, max_offset, matches)
+    _cmp_right(bx, ax, max_offset, matches)
     # mirror; remove 0 offset from first call, second call will add it again
     matches = [(ds, -offset if offset else None) for ds, offset in matches]
-    _cmp_right(a, b, max_offset, matches)
+    _cmp_right(ax, bx, max_offset, matches)
     for ds, offset in sorted(matches): # sort for ordered offset for equal ds
         if offset is not None:
-            match = Match(a_track, b_track, offset)
+            match = Match(a, b, offset)
             assert ds == match.common().ds()
             yield match
 
@@ -397,8 +397,8 @@ def main():
             raise RuntimeError(
                 "Sample rates different in files: '{}' and '{}'".format(
                     a.filename, b.filename))
-    matches = list(cmp(a, b, offset=args.o,
-                       threshold=None if args.t is None else args.t/100.))
+    matches = list(cmp_track(a, b, offset=args.o,
+                             threshold=None if args.t is None else args.t/100.))
 
     if not args.q:
         for match in matches:
