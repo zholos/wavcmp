@@ -351,7 +351,7 @@ def cmp_track(a, b, offset=None, threshold=None):
     matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))
     for ds, offset in matches:
         match = Match(a, b, offset)
-        assert ds == match.common().ds()
+        assert ds == match.ds()
         yield match
 
 
