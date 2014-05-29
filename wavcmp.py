@@ -128,17 +128,17 @@ class Segment:
     for both types of segment are similar in calculation.
     """
 
-    def __init__(self, ac, bc, rate, total, only_in=None):
+    def __init__(self, ac, bc, rate, total, padding=None):
         assert ac.shape == bc.shape
         self.ac = ac
         self.bc = bc
         self.rate = rate
         self.total = total
-        self.only_in = only_in
+        self.padding = padding
 
     def name(self, verbose=False):
-        if self.only_in:
-            return ("{} padding" if verbose else "{}").format(self.only_in)
+        if self.padding:
+            return ("{} padding" if verbose else "{}").format(self.padding)
         else:
             return "common"
 
@@ -156,18 +156,18 @@ class Segment:
     def zs_str(self):
         return _small(self.zs(), self.total, digits=5)
 
-    def ct_str(self):
+    def share_str(self):
         """Computes a measure of contribution to discrepancies by one or the
         other track."""
-        if self.only_in:
+        if self.padding:
             return
         i = self.ac != self.bc
         aci = self.ac[i]
         bci = self.bc[i]
-        ctn = _sum(np.abs(aci)-np.abs(bci))
-        ctd = _sum(np.abs(aci)+np.abs(bci))
-        name = "a" if ctn >= 0 else "b"
-        return "{} by {}".format(_small(abs(ctn), ctd), name)
+        sn = _sum(np.abs(aci)-np.abs(bci))
+        sd = _sum(np.abs(aci)+np.abs(bci))
+        name = "a" if sn >= 0 else "b"
+        return "{} by {}".format(_small(abs(sn), sd), name)
 
     def duration_str(self):
         return _duration(len(self.ac), self.rate)
@@ -175,11 +175,11 @@ class Segment:
     def format(self, verbose=False):
         if verbose:
             f = "  {0}: {1} ({2} samples), {3} MAD, {4} non-zero" + \
-                ("" if self.only_in else ", {5}")
+                ("" if self.padding else ", {5}")
         else:
-            f = "{0}: {1}" + (" ({2})" if self.only_in else "") + ", {3} {4}"
+            f = "{0}: {1}" + (" ({2})" if self.padding else "") + ", {3} {4}"
         return f.format(self.name(), self.duration_str(), len(self.ac),
-                        self.ds_str(), self.zs_str(), self.ct_str())
+                        self.ds_str(), self.zs_str(), self.share_str())
 
 class Match:
     """Match details."""
@@ -203,13 +203,13 @@ class Match:
             elif len(ac):
                 assert not len(bc)
                 # careful with np.zeros type
-                yield Segment(ac, ac*0, self.a.rate, ac.size, only_in="a")
+                yield Segment(ac, ac*0, self.a.rate, ac.size, padding="a")
             elif len(bc):
-                yield Segment(bc*0, bc, self.a.rate, bc.size, only_in="b")
+                yield Segment(bc*0, bc, self.a.rate, bc.size, padding="b")
 
     def common(self):
         for segment in self.segments():
-            if not segment.only_in:
+            if not segment.padding:
                 return segment
 
     def ds(self):
