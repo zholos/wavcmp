@@ -100,14 +100,17 @@ class Track(File):
         return np.asarray(self.data(), dtype=np.int32, order="F")
 
 
-def _small(n, d, digits=7):
-    if n:
+def _small(n, d, digits=7, sign=False):
+    assert d > 0 or n == d == 0
+    if n == 0:
+        return "0"
+    elif sign:
+        return ("+" if n > 0 else "-") + _small(abs(n), d, digits=digits)
+    else:
         assert n > 0
         m = pow(10, digits)
         i = (100 * m * n + d // 2) // d # round .5 up
         return str(i // m) + "." + str(i % m).zfill(digits) + "%"
-    else:
-        return "0"
 
 def _duration(samples, rate):
     assert samples >= 0
@@ -135,12 +138,7 @@ class Segment:
         self.rate = rate
         self.total = total
         self.padding = padding
-
-    def name(self, verbose=False):
-        if self.padding:
-            return ("{} padding" if verbose else "{}").format(self.padding)
-        else:
-            return "common"
+        assert padding in (None, "-", "+")
 
     def ds(self):
         """Computes difference metric."""
@@ -163,29 +161,28 @@ class Segment:
         i = self.ac != self.bc
         aci = self.ac[i]
         bci = self.bc[i]
-        sn = _sum(np.abs(aci)-np.abs(bci))
-        sd = _sum(np.abs(aci)+np.abs(bci))
-        name = "a" if sn >= 0 else "b"
-        return "{} by {}".format(_small(abs(sn), sd), name)
+        sn = _sum(np.abs(bci)-np.abs(aci))
+        sd = _sum(np.abs(bci)+np.abs(aci))
+        return _small(sn, sd, sign=True)
 
     def duration_str(self):
         return _duration(len(self.ac), self.rate)
 
     def format(self, verbose=False):
         if verbose:
-            f = "  {0}: {1} ({2} samples)"
+            f = "  {0}{1} ({2} samples)"
         elif self.padding:
-            f = "{0}: {1} ({2})"
+            f = "{0}{1} ({2})"
         else:
-            f = "{0}: {1}"
-        s = f.format(self.name(), self.duration_str(), len(self.ac))
+            f = "{0}{1}"
+        s = f.format(self.padding or "", self.duration_str(), len(self.ac))
         if verbose:
             f = ", {0} MAD, {1} non-zero"
         else:
             f = ", {0} {1}"
         s += f.format(self.ds_str(), self.zs_str())
         if verbose and not self.padding:
-            f = ", {0}"
+            f = ", {0} share"
             s += f.format(self.share_str())
         return s
 
@@ -211,9 +208,9 @@ class Match:
             elif len(ac):
                 assert not len(bc)
                 # careful with np.zeros type
-                yield Segment(ac, ac*0, self.a.rate, ac.size, padding="a")
+                yield Segment(ac, ac*0, self.a.rate, ac.size, padding="-")
             elif len(bc):
-                yield Segment(bc*0, bc, self.a.rate, bc.size, padding="b")
+                yield Segment(bc*0, bc, self.a.rate, bc.size, padding="+")
 
     def common(self):
         for segment in self.segments():
