@@ -6,6 +6,10 @@ import scipy.io.wavfile
 import numpy as np
 
 
+class SilenceableError(RuntimeError):
+    pass
+
+
 class File:
     """Similar to dedup.File, this represents a file (named on the command
     line), which may or may not be a valid Track.
@@ -406,35 +410,37 @@ def main():
     parser.add_argument("b", metavar="b.flac") # help=argparse.SUPPRESS
     args = parser.parse_args()
 
-    a, b = map(File, (args.a, args.b))
-    for i in (a, b):
-        if not isinstance(i, Track):
-            if args.s:
-                return False
+    try:
+        a, b = map(File, (args.a, args.b))
+        for i in (a, b):
+            if not isinstance(i, Track):
+                raise SilenceableError(
+                    "Not a stereo audio file: "
+                    "'{}'".format(i.filename))
+        if a.rate != b.rate:
+            raise SilenceableError(
+                "Sample rates different in files: "
+                "'{}' and '{}'".format(a.filename, b.filename))
+        matches = cmp_track(a, b, offset=args.o,
+                            threshold=None if args.t is None else args.t/100.)
+
+        matched = False
+        for match in matches:
+            matched = True
+            if args.q:
+                break
+            elif args.M:
+                match.show_machine_readable()
+                break
             else:
-                raise RuntimeError(
-                    "Not a stereo audio file: '{}'".format(i.filename))
-    if a.rate != b.rate:
+                match.show(verbose=args.v)
+        return matched
+
+    except SilenceableError:
         if args.s:
             return False
         else:
-            raise RuntimeError(
-                "Sample rates different in files: '{}' and '{}'".format(
-                    a.filename, b.filename))
-    matches = cmp_track(a, b, offset=args.o,
-                        threshold=None if args.t is None else args.t/100.)
-
-    matched = False
-    for match in matches:
-        matched = True
-        if args.q:
-            break
-        elif args.M:
-            match.show_machine_readable()
-            break
-        else:
-            match.show(verbose=args.v)
-    return matched
+            raise
 
 if __name__ == "__main__":
     try:
