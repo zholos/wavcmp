@@ -64,7 +64,7 @@ class Track(File):
     # Probed duration may be inaccurate.
     duration_accuracy = 5 # +/- seconds
 
-    def _load_data(self):
+    def _read_data(self):
         with tempfile.NamedTemporaryFile(suffix=".wav") as temp:
             subprocess.check_call(
                 ["ffmpeg", "-v", "quiet", "-i", self.filename,
@@ -83,14 +83,12 @@ class Track(File):
             raise RuntimeError(
                 "Data didn't match probe on file: '{}'".format(self.filename))
         assert data.dtype == np.int16
-        self._data = data
+        return data
 
     def data(self):
-        while True:
-            try:
-                return self._data
-            except AttributeError:
-                self._load_data()
+        if not hasattr(self, "_data"):
+            self._data = self._read_data()
+        return self._data
 
     data_high = -np.iinfo(np.int16).min
 
