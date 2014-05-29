@@ -413,7 +413,7 @@ def main():
                 return False
             else:
                 raise RuntimeError(
-                    "Not an audio file: '{}'".format(i.filename))
+                    "Not a stereo audio file: '{}'".format(i.filename))
     if a.rate != b.rate:
         if args.s:
             return False
