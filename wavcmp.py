@@ -17,9 +17,16 @@ class File:
 
     def __init__(self, filename):
         self.filename = filename
+        for kind in (Track,):
+            kind._probe(self)
+            if isinstance(self, kind):
+                break
 
+class Track(File):
+    @staticmethod
+    def _probe(self):
         process = subprocess.Popen(
-            ["ffprobe", "-v", "quiet", "-i", filename,
+            ["ffprobe", "-v", "quiet", "-i", self.filename,
                 "-print_format", "json", "-show_streams", "-show_error"],
             stdin=open(os.devnull, "r"), stdout=subprocess.PIPE)
         out, _ = process.communicate()
@@ -33,7 +40,8 @@ class File:
         if "error" in probe: # ret != 0 in this case
             return
         if not (ret == 0 and "streams" in probe):
-            raise RuntimeError("ffprobe failed on file: '{}'".format(filename))
+            raise RuntimeError(
+                "ffprobe failed on file: '{}'".format(self.filename))
 
         # To qualify as a track, the file must have one audio stream with
         # 2 channels and no video streams.
@@ -60,7 +68,6 @@ class File:
         self.rate = rate
         self.duration = duration # not "size", could mean duration * channels
 
-class Track(File):
     # Probed duration may be inaccurate.
     duration_accuracy = 5 # +/- seconds
 
