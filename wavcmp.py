@@ -346,11 +346,13 @@ def cmp_track(a, b, offset=None, threshold=None):
     # mirror; remove 0 offset from first call, second call will add it again
     matches = [(ds, -offset if offset else None) for ds, offset in matches]
     _cmp_right(ax, bx, max_offset, matches)
-    for ds, offset in sorted(matches): # sort for ordered offset for equal ds
-        if offset is not None:
-            match = Match(a, b, offset)
-            assert ds == match.common().ds()
-            yield match
+    matches = ((ds, offset) for ds, offset in matches if offset is not None)
+    # sort for ordered offset for equal MAD, offset=0 is best
+    matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))
+    for ds, offset in matches:
+        match = Match(a, b, offset)
+        assert ds == match.common().ds()
+        yield match
 
 
 def main():
