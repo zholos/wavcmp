@@ -312,7 +312,8 @@ def _cmp_right(a, b, max_offset, matches):
     am = np.sum(a, axis=1, dtype=a.dtype)
     bm = np.sum(b, axis=1, dtype=b.dtype)
 
-    group = 7 # best value probably depends on cache size and track frequencies
+    group = 59 # chosen empirically; best value probably depends on sample rate,
+               # track frequences, and cache size
     bg = _group_sums(bm, group)
 
     for shift in xrange(group):
