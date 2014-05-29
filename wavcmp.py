@@ -234,8 +234,8 @@ class Match:
         a = self.a.data_wider()
         b = self.b.data_wider()
         offset = self.offset
-        acs = np.split(a, [max(0, offset), len(b)+offset])
-        bcs = np.split(b, [max(0, -offset), len(a)-offset])
+        acs = np.split(a, (max(0, offset), len(b)+offset))
+        bcs = np.split(b, (max(0, -offset), len(a)-offset))
         for i, (ac, bc) in enumerate(zip(acs, bcs)):
             if i == 1:
                 assert len(ac) == len(bc)
@@ -270,7 +270,7 @@ class Match:
 def _group_sums(a, group):
     assert a.ndim == 1
     a = a[:len(a)//group*group]
-    return np.sum(a.reshape((len(a)//group, group)), axis=1,
+    return np.sum(a.reshape((-1, group)), axis=1,
                   dtype=a.dtype) # dtype defaults to int64 on 64-bit machine
 
 def _limited_ds(ac, bc, limit):
