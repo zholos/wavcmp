@@ -110,6 +110,13 @@ class Track(File):
         # "F" layout better for operations on specific channels.
         return np.asarray(self.data(), dtype=np.int32, order="F")
 
+    def cmp(self, other, **options):
+        if not isinstance(other, Track):
+            raise SilenceableError(
+                "Can't compare file and directory: "
+                "'{}' and '{}'".format(self.filename, other.filename))
+        return cmp_track(self, other, **options)
+
 
 def _small(n, d, digits=7, sign=False):
     assert d > 0 or n == d == 0
@@ -436,8 +443,8 @@ def main():
             raise SilenceableError(
                 "Sample rates different in files: "
                 "'{}' and '{}'".format(a.filename, b.filename))
-        matches = cmp_track(a, b, offset=args.o,
-                            threshold=None if args.t is None else args.t/100.)
+        matches = a.cmp(b, offset=args.o,
+                        threshold=None if args.t is None else args.t/100.)
 
         matched = False
         for match in matches:
