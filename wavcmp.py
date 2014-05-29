@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import sys, os, argparse, tempfile, subprocess, json, warnings, bisect
+import sys, os, os.path, argparse, tempfile, subprocess, json, warnings, bisect
 import scipy.io.wavfile
 import numpy as np
 
@@ -17,7 +17,7 @@ class File:
 
     def __init__(self, filename):
         self.filename = filename
-        for kind in (Track,):
+        for kind in (Album, Track):
             kind._probe(self)
             if isinstance(self, kind):
                 break
@@ -117,6 +117,38 @@ class Track(File):
                 "'{}' and '{}'".format(self.filename, other.filename))
         return cmp_track(self, other, **options)
 
+class Album(File):
+    @staticmethod
+    def _probe(self):
+        if not os.path.isdir(self.filename):
+            return
+        tracks = []
+        for item in sorted(os.listdir(self.filename)):
+            node = File(os.path.join(self.filename, item))
+            if isinstance(node, (Track, Album)):
+                if tracks and tracks[-1].rate != node.rate:
+                    raise SilenceableError(
+                        "Sample rates different in files: "
+                        "'{}' and '{}'".format(
+                            tracks[-1].filename, node.filename))
+            if isinstance(node, Track):
+                tracks.append(node)
+            elif isinstance(node, Album):
+                tracks += node.tracks
+        if not tracks:
+            return
+
+        self.__class__ = Album
+        self.tracks = tracks
+        self.rate = tracks[0].rate
+
+    def cmp(self, other, **options):
+        if not isinstance(other, Album):
+            raise SilenceableError(
+                "Can't compare directory and file: "
+                "'{}' and '{}'".format(self.filename, other.filename))
+        return cmp_album(self, other, **options)
+
 
 def _small(n, d, digits=7, sign=False):
     assert d > 0 or n == d == 0
@@ -167,7 +199,7 @@ class Segment:
         self.rate = rate
         self.total = total
         self.padding = padding
-        assert padding in (None, "-", "+")
+        assert padding in (None, "-", "+", "=")
 
     def classify(self):
         if not np.any(self.ac) and not np.any(self.bc):
@@ -254,6 +286,10 @@ class Match(_Result):
         _Result.__init__(self, a, b)
         self.offset = offset
 
+    def end_offset(self):
+        # matches comparison with max_offset in _cmp_right
+        return self.offset + len(self.b.data()) - len(self.a.data())
+
     def segments(self):
         a = self.a.data_wider()
         b = self.b.data_wider()
@@ -283,6 +319,43 @@ class Match(_Result):
     def show_machine_readable(self):
         s = self.common()
         print(self.offset, s.ds_str(), s.zs_str())
+
+class MatchSequence(_Result):
+    """Compound match from a sequence of matching tracks, such as an album."""
+
+    def __init__(self, a, b, sequence):
+        _Result.__init__(self, a, b)
+        self.sequence = list(sequence)
+
+    def segments(self):
+        last = None
+        for match in self.sequence:
+            for segment in match.segments():
+                if last:
+                    if {last.padding, segment.padding} == {"-", "+"} and \
+                            len(last.ac) == len(segment.ac):
+                        assert last.rate == segment.rate
+                        assert last.total == segment.total
+                        yield Segment(last.ac + segment.ac,
+                                      last.bc + segment.bc,
+                                      last.rate, last.total,
+                                      padding="=") # better legibility than "*"
+                        segment = None
+                    else:
+                        yield last
+                last = segment
+        if last:
+            yield last
+
+    def ds(self):
+        ds = 0
+        for segment in self.segments():
+            if not segment.padding or segment.padding == "=":
+                ds += segment.ds()
+        return ds
+
+    def show_machine_readable(self):
+        raise RuntimeError("-M output not defined for directories")
 
 
 def _group_sums(a, group):
@@ -407,6 +480,48 @@ def cmp_track(a, b, offset=None, threshold=None):
         yield match
 
 
+def cmp_album(a, b, **options):
+    assert a.rate == b.rate
+    if len(a.tracks) != len(b.tracks):
+        return
+
+    tracks = []
+    for at, bt in zip(a.tracks, b.tracks):
+        matches = list(cmp_track(at, bt, **options))
+        if not matches:
+            return
+        tracks.append(matches)
+
+    # The cartesian product of all track matches may be huge. Instead, we list
+    # only some interesting combinations.
+
+    # First tier album matches have matched padding between all tracks.
+    # There is at most one album match possible for each first track match.
+    # Album matches are ordered by overall difference metric.
+
+    assert tracks # at least one track
+    sequences = [[i] for i in tracks[0]]
+    for track in tracks[1:]:
+        ends = {i[-1].end_offset(): i for i in sequences}
+        matches = {i.offset: i for i in track}
+        sequences = [ends[i] + [matches[i]] for i in set(ends) & set(matches)]
+    matches = [MatchSequence(a, b, i) for i in sequences]
+    for match in sorted(matches,
+                        key=lambda x: (x.ds(), abs(x.sequence[0].offset),
+                                       x.sequence[0].offset<0)):
+        yield match
+
+    # Second tier album match is the single combination of best track matches,
+    # unless it's already listed as a first tier match.
+
+    best = [track[0] for track in tracks]
+    for match in matches:
+        if all(x is y for x, y in zip(best, match.sequence)):
+            break
+    else:
+        yield MatchSequence(a, b, best)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="wavcmp",
@@ -439,9 +554,9 @@ def main():
     try:
         a, b = map(File, (args.a, args.b))
         for i in (a, b):
-            if not isinstance(i, Track):
+            if not isinstance(i, (Track, Album)):
                 raise SilenceableError(
-                    "Not a stereo audio file: "
+                    "Not a stereo audio file or directory containing them: "
                     "'{}'".format(i.filename))
         if a.rate != b.rate:
             raise SilenceableError(
