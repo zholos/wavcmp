@@ -236,12 +236,22 @@ class Segment:
                 s += f.format(self.share_str(), self.cutoff_str())
         return s
 
-class Match:
+class _Result:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def show(self, verbose=False):
+        if verbose:
+            print(self.a.filename, "~", self.b.filename)
+        print(*(s.format(verbose=verbose) for s in self.segments()),
+              sep=("\n" if verbose else " | "))
+
+class Match(_Result):
     """Match details."""
 
     def __init__(self, a, b, offset):
-        self.a = a
-        self.b = b
+        _Result.__init__(self, a, b)
         self.offset = offset
 
     def segments(self):
@@ -273,12 +283,6 @@ class Match:
     def show_machine_readable(self):
         s = self.common()
         print(self.offset, s.ds_str(), s.zs_str())
-
-    def show(self, verbose=False):
-        if verbose:
-            print(self.a.filename, "~", self.b.filename)
-        print(*(s.format(verbose=verbose) for s in self.segments()),
-              sep=("\n" if verbose else " | "))
 
 
 def _group_sums(a, group):
