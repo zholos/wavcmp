@@ -421,17 +421,20 @@ def main():
             raise RuntimeError(
                 "Sample rates different in files: '{}' and '{}'".format(
                     a.filename, b.filename))
-    matches = list(cmp_track(a, b, offset=args.o,
-                             threshold=None if args.t is None else args.t/100.))
+    matches = cmp_track(a, b, offset=args.o,
+                        threshold=None if args.t is None else args.t/100.)
 
-    if not args.q:
-        for match in matches:
-            if args.M:
-                match.show_machine_readable()
-            else:
-                match.show(verbose=args.v)
-
-    return bool(matches)
+    matched = False
+    for match in matches:
+        matched = True
+        if args.q:
+            break
+        elif args.M:
+            match.show_machine_readable()
+            break
+        else:
+            match.show(verbose=args.v)
+    return matched
 
 if __name__ == "__main__":
     try:
