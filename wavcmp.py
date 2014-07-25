@@ -31,28 +31,35 @@ class Audio(File):
 
 class Track(Audio):
     @staticmethod
-    def _probe(self):
+    def _ffprobe(filename, sections, args):
         process = subprocess.Popen(
-            ["ffprobe", "-v", "quiet", "-i", self.filename,
-                "-print_format", "json", "-show_streams", "-show_error"],
-            stdin=open(os.devnull, "r"), stdout=subprocess.PIPE)
+            ["ffprobe", "-v", "quiet", "-i", filename, "-print_format", "json",
+                "-show_error"] + ["-show_"+s for s in sections] + args,
+            stdin=open(os.devnull, "r"), stdout=subprocess.PIPE, bufsize=-1)
         out, _ = process.communicate()
         ret = process.wait()
         # Assume that if ffprobe worked correctly, we get a valid JSON object
-        # with either "streams" (valid Track) or "error" (keep as File).
+        # with either the requested section (valid Track) or "error" (keep as
+        # File).
         try:
             probe = json.loads(out)
         except ValueError:
-            probe = {}
+            probe = {} # RuntimeError later
         if "error" in probe: # ret != 0 in this case
-            return
-        if not (ret == 0 and "streams" in probe):
-            raise RuntimeError(
-                "ffprobe failed on file: '{}'".format(self.filename))
+            return # no RuntimeError, but will be rejected by _probe
+        if ret == 0 and all(s in probe for s in sections):
+            return probe
+        else:
+            raise RuntimeError("ffprobe failed on file: '{}'".format(filename))
 
+    @staticmethod
+    def _probe(self):
         # To qualify as a track, the file must have one audio stream with
         # 2 channels and no video streams.
         rate = None
+        probe = Track._ffprobe(self.filename, ["streams"], [])
+        if not probe:
+            return
         for s in probe["streams"]:
             if s.get("codec_type") == "audio":
                 if s["channels"] != 2:
