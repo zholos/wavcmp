@@ -368,7 +368,7 @@ def _limited_ds(ac, bc, limit):
     assert len(ac) == len(bc)
     # iterate over chunks pseudo-randomly so less likely to keep summing silence
     step = 1<<13 # chosen empirically
-    n = -(-len(ac) // step)
+    n = -(-len(ac) // step) or 1
     a = n * 4 + 1 # Full-period theorem
     c = 2305843009213693951 # Mersenne prime
     assert n % c # choose a larger prime c if this limit is ever reached
