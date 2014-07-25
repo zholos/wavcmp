@@ -22,10 +22,14 @@ class File:
             if isinstance(self, kind):
                 break
 
+class Audio(File):
     def title(self):
-        return self.filename
+        title = self.filename
+        if self.bps:
+            title += " [{:.0f} kbps]".format(self.bps / 1000.)
+        return title
 
-class Track(File):
+class Track(Audio):
     @staticmethod
     def _probe(self):
         process = subprocess.Popen(
@@ -78,12 +82,6 @@ class Track(File):
         self.duration = duration # not "size", could mean duration * channels
         self.bps = bps
 
-    def title(self):
-        title = self.filename
-        if self.bps:
-            title += " [{:.0f} kbps]".format(self.bps / 1000.)
-        return title
-
     # Probed duration may be inaccurate.
     duration_accuracy = 5 # +/- seconds
 
@@ -133,7 +131,7 @@ class Track(File):
                 "'{}' and '{}'".format(self.filename, other.filename))
         return cmp_track(self, other, **options)
 
-class Album(File):
+class Album(Audio):
     @staticmethod
     def _probe(self):
         if not os.path.isdir(self.filename):
@@ -157,6 +155,12 @@ class Album(File):
         self.__class__ = Album
         self.tracks = tracks
         self.rate = tracks[0].rate
+        if any(i.bps is None for i in tracks):
+            self.bps = None
+        else:
+            # estimate for display
+            self.bps = sum(i.bps * i.duration for i in tracks) / \
+                       sum(i.duration for i in tracks)
 
     def cmp(self, other, **options):
         if not isinstance(other, Album):
@@ -570,7 +574,7 @@ def main():
     try:
         a, b = map(File, (args.a, args.b))
         for i in (a, b):
-            if not isinstance(i, (Track, Album)):
+            if not isinstance(i, Audio):
                 raise SilenceableError(
                     "Not a stereo audio file or directory containing them: "
                     "'{}'".format(i.filename))
