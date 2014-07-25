@@ -57,8 +57,11 @@ class Track(Audio):
         # To qualify as a track, the file must have one audio stream with
         # 2 channels and no video streams.
         rate = None
-        probe = Track._ffprobe(self.filename, ["streams"], [])
+        probe = Track._ffprobe(self.filename, ["streams", "format"], [])
         if not probe:
+            return
+        if probe["format"]["probe_score"] <= 25:
+            # This score triggers a misdetection warning from ffprobe
             return
         for s in probe["streams"]:
             if s.get("codec_type") == "audio":
