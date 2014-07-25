@@ -22,6 +22,9 @@ class File:
             if isinstance(self, kind):
                 break
 
+    def title(self):
+        return self.filename
+
 class Track(File):
     @staticmethod
     def _probe(self):
@@ -56,6 +59,12 @@ class Track(File):
                 tsn, tsd = map(int, s["time_base"].split("/"))
                 duration = int(s["duration_ts"]) * rate * tsn // tsd
                 # remainder discarded, this is inaccurate anyway
+                bps = None
+                if s["codec_name"] == "mp3":
+                    try:
+                        bps = int(s.get("bit_rate"))
+                    except ValueError:
+                        pass
             elif s.get("codec_type") == "video":
                 if s.get("disposition", {}).get("attached_pic"): # cover art
                     pass
@@ -67,6 +76,13 @@ class Track(File):
         self.__class__ = Track
         self.rate = rate
         self.duration = duration # not "size", could mean duration * channels
+        self.bps = bps
+
+    def title(self):
+        title = self.filename
+        if self.bps:
+            title += " [{:.0f} kbps]".format(self.bps / 1000.)
+        return title
 
     # Probed duration may be inaccurate.
     duration_accuracy = 5 # +/- seconds
@@ -275,7 +291,7 @@ class _Result:
 
     def show(self, verbose=False):
         if verbose:
-            print(self.a.filename, "~", self.b.filename)
+            print(self.a.title(), "~", self.b.title())
         print(*(s.format(verbose=verbose) for s in self.segments()),
               sep=("\n" if verbose else " | "))
 
