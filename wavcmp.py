@@ -73,9 +73,9 @@ class Track(Audio):
                 if rate is not None: # second audio stream
                     return
                 rate = int(s["sample_rate"])
+                index = int(s["index"])
+                duration = s.get("duration_ts")
                 tsn, tsd = map(int, s["time_base"].split("/"))
-                duration = int(s["duration_ts"]) * rate * tsn // tsd
-                # remainder discarded, this is inaccurate anyway
                 bps = None
                 if s["codec_name"] == "mp3":
                     try:
@@ -90,13 +90,28 @@ class Track(Audio):
         if rate is None:
             return
 
+        # Separate from probing to reject non-tracks as quickly as possible.
+        # Slower than estimate above, but still much faster than reading data.
+        probe = Track._ffprobe(
+            self.filename, ["packets"],
+            ["-select_streams", str(index), "-show_entries", "packet=duration"])
+        if not probe:
+            return
+        packets = probe["packets"]
+        if packets and "duration" not in packets[0]:
+            pass # no duration data for e.g. Monkey's Audio; keep header value
+        else:
+            duration = sum(int(p["duration"]) for p in packets)
+        duration = duration * rate * tsn // tsd
+        # remainder discarded, this is not precise anyway
+
         self.__class__ = Track
         self.rate = rate
         self.duration = duration # not "size", could mean duration * channels
         self.bps = bps
 
-    # Probed duration may be inaccurate.
-    duration_accuracy = 5 # +/- seconds
+    # Probed duration may be inaccurate (even when counting packets).
+    duration_accuracy = 1 # +/- seconds
 
     def _read_data(self):
         with tempfile.NamedTemporaryFile(suffix=".wav") as temp:
