@@ -578,7 +578,7 @@ def main():
         add_help=False)
 
     parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
-    parser.add_argument("--version", action="version", version="%(prog)s 0.2",
+    parser.add_argument("--version", action="version", version="%(prog)s 0.3",
                         help=argparse.SUPPRESS)
     parser.add_argument("-o", metavar="offset", type=float,
                         help="maximum offset, default 0.5 seconds")
