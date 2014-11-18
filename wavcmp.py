@@ -496,10 +496,14 @@ def cmp_track(a, b, offset=None, threshold=None):
     matches.
     """
 
-    assert a.rate == b.rate
-
     if offset is None:
         offset = 5
+    if threshold is None:
+        # -V 1 MP3 should just clear 1%, -b 320 should also
+        threshold = 0.01
+    assert offset >= 0 and threshold >= 0
+
+    assert a.rate == b.rate
     max_offset = -int(-a.rate*offset)
 
     # Offset basically means ignored padding at the front in one of the tracks,
@@ -510,10 +514,6 @@ def cmp_track(a, b, offset=None, threshold=None):
 
     ax = a.data_wider()
     bx = b.data_wider()
-
-    if threshold is None:
-        # -V 1 MP3 should just clear 1%, -b 320 should also
-        threshold = 0.01
     total = min(ax.size, bx.size) # fixed denominator regardless of overlap
     limit = int(a.data_high * total * threshold) # absolute threshold
 
@@ -585,7 +585,7 @@ def main():
                         help=argparse.SUPPRESS)
     parser.add_argument("-o", metavar="offset", type=float,
                         help="maximum offset, default 0.5 seconds")
-    parser.add_argument("-t", metavar="threshold", type=float,
+    parser.add_argument("-t", metavar="threshold", type=lambda x: float(x)/100.,
                         help="match threshold, default 1%%")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-v", action="store_true",
@@ -613,8 +613,7 @@ def main():
             raise SilenceableError(
                 "Sample rates different in files: "
                 "'{}' and '{}'".format(a.filename, b.filename))
-        matches = a.cmp(b, offset=args.o,
-                        threshold=None if args.t is None else args.t/100.)
+        matches = a.cmp(b, offset=args.o, threshold=args.t)
 
         matched = False
         for match in matches:
