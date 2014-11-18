@@ -342,8 +342,11 @@ class Match(_Result):
         a = self.a.data_wider()
         b = self.b.data_wider()
         offset = self.offset
-        acs = np.split(a, (max(0, offset), len(b)+offset))
-        bcs = np.split(b, (max(0, -offset), len(a)-offset))
+        with warnings.catch_warnings():
+            # Changing handling of empty arrays not relevant to us
+            warnings.simplefilter("ignore", FutureWarning)
+            acs = np.split(a, (max(0, offset), len(b)+offset))
+            bcs = np.split(b, (max(0, -offset), len(a)-offset))
         for i, (ac, bc) in enumerate(zip(acs, bcs)):
             if i == 1:
                 assert len(ac) == len(bc)
