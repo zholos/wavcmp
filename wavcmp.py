@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import sys, os, os.path, argparse, tempfile, subprocess, json, warnings, bisect
+import sys, os, os.path, argparse, tempfile, subprocess, json, warnings
+import bisect, itertools
 import scipy.io.wavfile
 import numpy as np
 
@@ -247,7 +248,7 @@ class Segment:
         self.rate = rate
         self.total = total
         self.padding = padding
-        assert padding in (None, "-", "+", "=")
+        assert padding in (None, "-", "+", "=", "<", ">")
 
     def classify(self):
         if not np.any(self.ac) and not np.any(self.bc):
@@ -297,7 +298,7 @@ class Segment:
     def format(self, verbose=False):
         if verbose:
             f = "  {0}{1} ({2} samples)"
-        elif self.padding:
+        elif self.padding in ("-", "+", "="):
             f = "{0}{1} ({2})"
         else:
             f = "{0}{1}"
@@ -331,33 +332,45 @@ class Match(_Result):
     """Match details."""
 
     def __init__(self, a, b, offset):
+        assert (a or b) and (a and b or offset == 0)
         _Result.__init__(self, a, b)
         self.offset = offset
 
     def end_offset(self):
-        # matches comparison with max_offset in _cmp_right
-        return self.offset + len(self.b.data()) - len(self.a.data())
+        if self.a and self.b:
+            # matches comparison with max_offset in _cmp_right
+            return self.offset + len(self.b.data()) - len(self.a.data())
+        else:
+            return 0
 
     def segments(self):
-        a = self.a.data_wider()
-        b = self.b.data_wider()
-        offset = self.offset
-        with warnings.catch_warnings():
-            # Changing handling of empty arrays not relevant to us
-            warnings.simplefilter("ignore", FutureWarning)
-            acs = np.split(a, (max(0, offset), len(b)+offset))
-            bcs = np.split(b, (max(0, -offset), len(a)-offset))
-        for i, (ac, bc) in enumerate(zip(acs, bcs)):
-            if i == 1:
-                assert len(ac) == len(bc)
-                yield Segment(ac, bc, self.a.rate,
-                              min(a.size, b.size)) # matches total in cmp_track
-            elif len(ac):
-                assert not len(bc)
-                # careful with np.zeros type
-                yield Segment(ac, ac*0, self.a.rate, ac.size, padding="-")
-            elif len(bc):
-                yield Segment(bc*0, bc, self.a.rate, bc.size, padding="+")
+        if self.a and self.b:
+            a = self.a.data_wider()
+            b = self.b.data_wider()
+            offset = self.offset
+            with warnings.catch_warnings():
+                # Changing handling of empty arrays not relevant to us
+                warnings.simplefilter("ignore", FutureWarning)
+                acs = np.split(a, (max(0, offset), len(b)+offset))
+                bcs = np.split(b, (max(0, -offset), len(a)-offset))
+            for i, (ac, bc) in enumerate(zip(acs, bcs)):
+                if i == 1:
+                    assert len(ac) == len(bc)
+                    yield Segment(
+                        ac, bc, self.a.rate,
+                        min(a.size, b.size)) # matches total in cmp_track
+                elif len(ac):
+                    assert not len(bc)
+                    # careful with np.zeros type
+                    yield Segment(ac, ac*0, self.a.rate, ac.size, padding="-")
+                elif len(bc):
+                    yield Segment(bc*0, bc, self.a.rate, bc.size, padding="+")
+        elif self.a:
+            ac = self.a.data_wider()
+            yield Segment(ac, ac*0, self.a.rate, ac.size, padding="<")
+        elif self.b:
+            bc = self.b.data_wider()
+            yield Segment(bc*0, bc, self.b.rate, bc.size, padding=">")
 
     def common(self):
         for segment in self.segments():
@@ -483,7 +496,7 @@ def _cmp_right(a, b, max_offset, matches):
                     while matches[-1][0] > limit(): # make sure to keep ds=0
                         matches.pop()
 
-def cmp_track(a, b, offset=None, threshold=None):
+def cmp_track(a, b, offset=None, threshold=None, skip=None):
     """Compare two tracks at different offsets and yields good matches.
 
     The difference metric is the sum of absolute differences (SAD) over the
@@ -531,17 +544,37 @@ def cmp_track(a, b, offset=None, threshold=None):
         yield match
 
 
-def cmp_album(a, b, **options):
+def cmp_album(a, b, skip=None, **options):
+    if skip is None:
+        skip = 0
+    assert skip >= 0
+
     assert a.rate == b.rate
-    if len(a.tracks) != len(b.tracks):
+    if not skip and len(a.tracks) != len(b.tracks):
         return
 
     tracks = []
-    for at, bt in zip(a.tracks, b.tracks):
-        matches = list(cmp_track(at, bt, **options))
-        if not matches:
-            return
-        tracks.append(matches)
+    at = list(a.tracks)
+    bt = list(b.tracks)
+    while True:
+        for i, j in sorted(itertools.product(range(min(len(at), skip+1)),
+                                             range(min(len(bt), skip+1))),
+                           key=lambda x: (sum(x), abs(x[0]-x[1]), x[0]>x[1])):
+            matches = list(cmp_track(at[i], bt[j], **options))
+            if matches:
+                tracks += [[Match(t, None, 0)] for t in at[:i]]
+                tracks += [[Match(None, t, 0)] for t in bt[:j]]
+                tracks.append(matches)
+                del at[:i+1]
+                del bt[:j+1]
+                break
+        else:
+            if len(at) <= skip and len(bt) <= skip:
+                tracks += [[Match(t, None, 0)] for t in at]
+                tracks += [[Match(None, t, 0)] for t in bt]
+                break
+            else:
+                return
 
     # The cartesian product of all track matches may be huge. Instead, we list
     # only some interesting combinations.
@@ -587,6 +620,8 @@ def main():
                         help="maximum offset, default 0.5 seconds")
     parser.add_argument("-t", metavar="threshold", type=lambda x: float(x)/100.,
                         help="match threshold, default 1%%")
+    parser.add_argument("-k", metavar="skip", type=int,
+                        help="max skipped album tracks, default 0")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-v", action="store_true",
                        help="verbose match display")
@@ -613,7 +648,7 @@ def main():
             raise SilenceableError(
                 "Sample rates different in files: "
                 "'{}' and '{}'".format(a.filename, b.filename))
-        matches = a.cmp(b, offset=args.o, threshold=args.t)
+        matches = a.cmp(b, offset=args.o, threshold=args.t, skip=args.k)
 
         matched = False
         for match in matches:
