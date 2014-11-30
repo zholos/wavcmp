@@ -5,6 +5,10 @@ This program compares two audio files to determine if their waveforms closely
 match, allowing for a relative time offset. The difference metric is the sum of
 absolute differences between samples.
 
+Run ``wavcmp.py`` from the source directory or install it using ``pip``::
+
+    pip install [--user] .
+
 
 Algorithm
 ---------
