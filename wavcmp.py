@@ -660,18 +660,14 @@ def main():
                 break
             else:
                 match.show(verbose=args.v)
-        return matched
+        parser.exit(0 if matched else 1)
 
-    except SilenceableError:
-        if args.s:
-            return False
+    except (EnvironmentError, RuntimeError) as e:
+        if args.s and isinstance(e, SilenceableError):
+            message = None
         else:
-            raise
+            message = "{0}: error: {1}".format(parser.prog, e)
+        parser.exit(1, message=message)
 
 if __name__ == "__main__":
-    try:
-        sys.exit(int(not main()))
-    except (EnvironmentError, RuntimeError) as e:
-        print("{0}: error: {1}".format(os.path.basename(sys.argv[0]), e),
-              file=sys.stderr)
-        sys.exit(1)
+    main()
