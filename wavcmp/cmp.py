@@ -36,8 +36,42 @@ def _limited_ds(ac, bc, limit):
             break
     return s
 
-def _cmp_right(ax, bx, offset_bound, limit, matches):
-    """Compare only for positive offsets (delaying b relative to a)."""
+def _cmp_candidates(ag, bg, start, stop, limit, check_match):
+    for i in xrange(start, stop):
+        # *c is common (overlapping) part
+        a0 = max(0, i)
+        b0 = max(0, -i)
+        agc = ag[a0:][:len(bg)-b0]
+        bgc = bg[b0:][:len(ag)-a0]
+        dsg = _limited_ds(agc, bgc, limit)
+        if dsg is not None:
+            limit = check_match(i) # simpler than yield
+
+def _cmp_both(ax, bx, offset_bound, limit, matches):
+    # Exact check, called for only a few candidates by heuristic algorithm.
+    def check_match(offset):
+        assert -len(bx) <= offset <= len(ax)
+        ac = ax[max(0, offset):][:len(bx)-max(0, -offset)]
+        bc = bx[max(0, -offset):][:len(ax)-max(0, offset)]
+        ds = _limited_ds(ac, bc, limit[0])
+        if ds is not None:
+            bisect.insort(matches, (ds, offset))
+            limit[0] = matches[0][0] * 2
+            while matches[-1][0] > limit[0]: # make sure to keep ds=0
+                matches.pop()
+        return limit[0]
+
+    # Match offset is delay of b start from a start:
+    #   a [-----------]
+    #   b (offset)[-----]
+
+    # An overlap of exactly zero is included for completeness.
+    # Range of possible offsets derived from these conditions:
+    #   -len(b) <= offset <= len(a)
+    #   abs(offset) <= offset_bound
+    #   abs(offset+len(bx)-len(ax)) <= offset_bound
+    min_offset = max(-len(bx), -offset_bound + max(0, len(ax)-len(bx)))
+    max_offset = min(len(ax), offset_bound + min(0, len(ax)-len(bx)))
 
     # Create a shorter series by summing small sequences of consecutive samples.
     # Since |a+b|<=|a|+|b|, the metric over sums is a lower bound on the metric
@@ -56,31 +90,17 @@ def _cmp_right(ax, bx, offset_bound, limit, matches):
                # track frequences, and cache size
     bg = _group_sums(bm, group)
 
+    # First shift iteration covers offset=0, so if tracks are identical, limit
+    # becomes 0 which speeds up the rest of the search.
     for shift in xrange(group):
         ag = _group_sums(am[shift:], group)
 
-        for i in xrange((offset_bound-shift)//group+1):
-            offset = i*group+shift
-
-            # TODO: adjust range to conditions instead of checking every loop
-            if offset > len(ax): # include test at zero overlap for completeness
-                continue
-            if abs(offset + len(bx) - len(ax)) > offset_bound:
-                continue
-
-            # *c is common (overlapping) part
-            agc = ag[i:][:len(bg)]
-            bgc = bg[:len(ag)-i]
-            dsg = _limited_ds(agc, bgc, limit[0])
-            if dsg is not None:
-                ac = ax[offset:][:len(bx)]
-                bc = bx[:len(ax)-offset]
-                ds = _limited_ds(ac, bc, limit[0])
-                if ds is not None:
-                    bisect.insort(matches, (ds, offset))
-                    limit[0] = matches[0][0] * 2
-                    while matches[-1][0] > limit[0]: # make sure to keep ds=0
-                        matches.pop()
+        # Range derived from this condition:
+        #   min_offset <= i*group+shift <= max_offset
+        start = -(-(min_offset-shift)//group)
+        stop = (max_offset-shift)//group+1
+        _cmp_candidates(ag, bg, start, stop, limit[0],
+                        lambda i: check_match(i*group+shift))
 
 def cmp_track(a, b, offset=None, threshold=None, skip=None):
     """Compare two tracks at different offsets and yields good matches.
@@ -117,10 +137,7 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
     limit = [int(a.data_high * total * threshold)] # absolute threshold
     matches = [] # [(SAD, offset)], ordered
 
-    _cmp_right(bx, ax, offset_bound, limit, matches)
-    # mirror; remove 0 offset from first call, second call will add it again
-    matches = [(ds, -offset) for ds, offset in matches if offset]
-    _cmp_right(ax, bx, offset_bound, limit, matches)
+    _cmp_both(ax, bx, offset_bound, limit, matches)
     # sort for ordered offset for equal MAD, offset=0 is best
     matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))
     for ds, offset in matches:
