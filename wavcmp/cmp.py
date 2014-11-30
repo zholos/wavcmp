@@ -47,7 +47,41 @@ def _cmp_candidates(ag, bg, start, stop, limit, check_match):
         if dsg is not None:
             limit = check_match(i) # simpler than yield
 
-def _cmp_both(ax, bx, offset_bound, limit, matches):
+def cmp_track(a, b, offset=None, threshold=None, skip=None):
+    """Compare two tracks at different offsets and yields good matches.
+
+    The difference metric is the sum of absolute differences (SAD) over the
+    common part. A match is a particular offset at which this metric is below a
+    certain absolute threshold. There may be multiple good matches. The first
+    returned match has the lowest metric, the rest are ordered and their metrics
+    are not more than double that of the first match.
+
+    The metric and return conditions are chosen this way to quickly reject non-
+    matches.
+    """
+
+    if offset is None:
+        offset = 5
+    if threshold is None:
+        # -V 1 MP3 should just clear 1%, -b 320 should also
+        threshold = 0.01
+    assert offset >= 0 and threshold >= 0
+
+    assert a.rate == b.rate
+    offset_bound = -int(-a.rate*offset)
+
+    # Offset basically means ignored padding at the front in one of the tracks,
+    # also limits padding at the back.
+    if abs(a.duration - b.duration) > \
+            2 * offset_bound + 2 * a.duration_accuracy * a.rate:
+        return
+
+    ax = a.data_wider()
+    bx = b.data_wider()
+    total = min(ax.size, bx.size) # fixed denominator regardless of overlap
+    limit = [int(a.data_high * total * threshold)] # absolute threshold
+    matches = [] # [(SAD, offset)], ordered
+
     # Exact check, called for only a few candidates by heuristic algorithm.
     def check_match(offset):
         assert -len(bx) <= offset <= len(ax)
@@ -102,42 +136,6 @@ def _cmp_both(ax, bx, offset_bound, limit, matches):
         _cmp_candidates(ag, bg, start, stop, limit[0],
                         lambda i: check_match(i*group+shift))
 
-def cmp_track(a, b, offset=None, threshold=None, skip=None):
-    """Compare two tracks at different offsets and yields good matches.
-
-    The difference metric is the sum of absolute differences (SAD) over the
-    common part. A match is a particular offset at which this metric is below a
-    certain absolute threshold. There may be multiple good matches. The first
-    returned match has the lowest metric, the rest are ordered and their metrics
-    are not more than double that of the first match.
-
-    The metric and return conditions are chosen this way to quickly reject non-
-    matches.
-    """
-
-    if offset is None:
-        offset = 5
-    if threshold is None:
-        # -V 1 MP3 should just clear 1%, -b 320 should also
-        threshold = 0.01
-    assert offset >= 0 and threshold >= 0
-
-    assert a.rate == b.rate
-    offset_bound = -int(-a.rate*offset)
-
-    # Offset basically means ignored padding at the front in one of the tracks,
-    # also limits padding at the back.
-    if abs(a.duration - b.duration) > \
-            2 * offset_bound + 2 * a.duration_accuracy * a.rate:
-        return
-
-    ax = a.data_wider()
-    bx = b.data_wider()
-    total = min(ax.size, bx.size) # fixed denominator regardless of overlap
-    limit = [int(a.data_high * total * threshold)] # absolute threshold
-    matches = [] # [(SAD, offset)], ordered
-
-    _cmp_both(ax, bx, offset_bound, limit, matches)
     # sort for ordered offset for equal MAD, offset=0 is best
     matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))
     for ds, offset in matches:
