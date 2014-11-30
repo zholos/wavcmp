@@ -224,8 +224,8 @@ def _sum(a):
     # convert to long int to avoid overflow later
     return int(np.sum(a, dtype=np.int64))
 
-def _spectrum(a):
-    a = np.mean(a, axis=1, dtype=np.float_) / Track.data_high
+def _spectrum(a, high):
+    a = np.mean(a, axis=1, dtype=np.float_) / high
     window = 8192 # should be a power of 2
     a.resize(-(-len(a)//window)*window) # pad with zeroes
     s = np.fft.fft(a.reshape((-1, window)))
@@ -241,10 +241,11 @@ class Segment:
     for both types of segment are similar in calculation.
     """
 
-    def __init__(self, ac, bc, rate, total, padding=None):
+    def __init__(self, ac, bc, high, rate, total, padding=None):
         assert ac.shape == bc.shape
         self.ac = ac
         self.bc = bc
+        self.high = high
         self.rate = rate
         self.total = total
         self.padding = padding
@@ -261,7 +262,7 @@ class Segment:
         return _sum(np.abs(self.ac - self.bc))
 
     def ds_str(self):
-        return _small(self.ds(), self.total * Track.data_high)
+        return _small(self.ds(), self.total * self.high)
 
     def zs(self):
         """Computes number of different samples."""
@@ -283,8 +284,8 @@ class Segment:
 
     def cutoff_str(self):
         assert not self.padding
-        asc = np.cumsum(_spectrum(self.ac)[::-1])[::-1]
-        bsc = np.cumsum(_spectrum(self.bc)[::-1])[::-1]
+        asc = np.cumsum(_spectrum(self.ac, self.high)[::-1])[::-1]
+        bsc = np.cumsum(_spectrum(self.bc, self.high)[::-1])[::-1]
         db = 10*(np.log10(bsc)-np.log10(asc))
         gain = np.argmax(db)
         drop = np.argmin(db)
@@ -345,6 +346,8 @@ class Match(_Result):
 
     def segments(self):
         if self.a and self.b:
+            assert self.a.data_high == self.b.data_high
+            assert self.a.rate == self.b.rate
             a = self.a.data_wider()
             b = self.b.data_wider()
             offset = self.offset
@@ -357,20 +360,24 @@ class Match(_Result):
                 if i == 1:
                     assert len(ac) == len(bc)
                     yield Segment(
-                        ac, bc, self.a.rate,
+                        ac, bc, self.a.data_high, self.a.rate,
                         min(a.size, b.size)) # matches total in cmp_track
                 elif len(ac):
                     assert not len(bc)
                     # careful with np.zeros type
-                    yield Segment(ac, ac*0, self.a.rate, ac.size, padding="-")
+                    yield Segment(ac, ac*0, self.a.data_high, self.a.rate,
+                                  ac.size, padding="-")
                 elif len(bc):
-                    yield Segment(bc*0, bc, self.a.rate, bc.size, padding="+")
+                    yield Segment(bc*0, bc, self.a.data_high, self.a.rate,
+                                  bc.size, padding="+")
         elif self.a:
             ac = self.a.data_wider()
-            yield Segment(ac, ac*0, self.a.rate, ac.size, padding="<")
+            yield Segment(ac, ac*0, self.a.data_high, self.a.rate,
+                          ac.size, padding="<")
         elif self.b:
             bc = self.b.data_wider()
-            yield Segment(bc*0, bc, self.b.rate, bc.size, padding=">")
+            yield Segment(bc*0, bc, self.b.data_high, self.b.rate,
+                          bc.size, padding=">")
 
     def common(self):
         for segment in self.segments():
@@ -398,11 +405,12 @@ class MatchSequence(_Result):
                 if last:
                     if {last.padding, segment.padding} == {"-", "+"} and \
                             len(last.ac) == len(segment.ac):
+                        assert last.high == segment.high
                         assert last.rate == segment.rate
-                        assert last.total == segment.total
+                        assert last.total == segment.total # equal to padding
                         yield Segment(last.ac + segment.ac,
                                       last.bc + segment.bc,
-                                      last.rate, last.total,
+                                      last.high, last.rate, last.total,
                                       padding="=") # better legibility than "*"
                         segment = None
                     else:
