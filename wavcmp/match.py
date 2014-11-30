@@ -143,7 +143,7 @@ class Match(_Result):
 
     def end_offset(self):
         if self.a and self.b:
-            # matches comparison with max_offset in _cmp_right
+            # matches comparison with offset_bound in cmp_track
             return self.offset + len(self.b.data()) - len(self.a.data())
         else:
             return 0

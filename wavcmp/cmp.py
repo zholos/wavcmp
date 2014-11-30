@@ -31,7 +31,7 @@ def _limited_ds(ac, bc, limit):
             break
     return s
 
-def _cmp_right(a, b, max_offset, matches):
+def _cmp_right(ax, bx, offset_bound, matches):
     """Compare only for positive offsets (delaying b relative to a)."""
 
     # Create a shorter series by summing small sequences of consecutive samples.
@@ -47,8 +47,8 @@ def _cmp_right(a, b, max_offset, matches):
         return matches[0][0] * 2
 
     # combine channels for grouping since they are correlated anyway
-    am = np.sum(a, axis=1, dtype=a.dtype)
-    bm = np.sum(b, axis=1, dtype=b.dtype)
+    am = np.sum(ax, axis=1, dtype=ax.dtype)
+    bm = np.sum(bx, axis=1, dtype=bx.dtype)
 
     group = 59 # chosen empirically; best value probably depends on sample rate,
                # track frequences, and cache size
@@ -57,11 +57,11 @@ def _cmp_right(a, b, max_offset, matches):
     for shift in xrange(group):
         ag = _group_sums(am[shift:], group)
 
-        for offset in xrange(shift, max_offset+1, group):
+        for offset in xrange(shift, offset_bound+1, group):
             # TODO: adjust range to conditions instead of checking every loop
-            if offset > len(a): # include test at zero overlap for completeness
+            if offset > len(ax): # include test at zero overlap for completeness
                 continue
-            if abs(offset + len(b) - len(a)) > max_offset:
+            if abs(offset + len(bx) - len(ax)) > offset_bound:
                 continue
 
             # *c is common (overlapping) part
@@ -69,8 +69,8 @@ def _cmp_right(a, b, max_offset, matches):
             bgc = bg[:len(ag)-offset//group]
             dsg = _limited_ds(agc, bgc, limit())
             if dsg is not None:
-                ac = a[offset:][:len(b)]
-                bc = b[:len(a)-offset]
+                ac = ax[offset:][:len(bx)]
+                bc = bx[:len(ax)-offset]
                 ds = _limited_ds(ac, bc, limit())
                 if ds is not None:
                     bisect.insort(matches, (ds, offset))
@@ -98,12 +98,12 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
     assert offset >= 0 and threshold >= 0
 
     assert a.rate == b.rate
-    max_offset = -int(-a.rate*offset)
+    offset_bound = -int(-a.rate*offset)
 
     # Offset basically means ignored padding at the front in one of the tracks,
     # also limits padding at the back.
     if abs(a.duration - b.duration) > \
-            2 * max_offset + 2 * a.duration_accuracy * a.rate:
+            2 * offset_bound + 2 * a.duration_accuracy * a.rate:
         return
 
     ax = a.data_wider()
@@ -112,10 +112,10 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
     limit = int(a.data_high * total * threshold) # absolute threshold
 
     matches = [(limit // 2, None)] # [pairs of (SAD, offset)]
-    _cmp_right(bx, ax, max_offset, matches)
+    _cmp_right(bx, ax, offset_bound, matches)
     # mirror; remove 0 offset from first call, second call will add it again
     matches = [(ds, -offset if offset else None) for ds, offset in matches]
-    _cmp_right(ax, bx, max_offset, matches)
+    _cmp_right(ax, bx, offset_bound, matches)
     matches = ((ds, offset) for ds, offset in matches if offset is not None)
     # sort for ordered offset for equal MAD, offset=0 is best
     matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))
