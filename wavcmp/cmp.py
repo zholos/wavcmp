@@ -31,7 +31,7 @@ def _limited_ds(ac, bc, limit):
             break
     return s
 
-def _cmp_right(ax, bx, offset_bound, matches):
+def _cmp_right(ax, bx, offset_bound, limit, matches):
     """Compare only for positive offsets (delaying b relative to a)."""
 
     # Create a shorter series by summing small sequences of consecutive samples.
@@ -42,9 +42,6 @@ def _cmp_right(ax, bx, offset_bound, matches):
     # are recalculated at different shifts, e.g. shift=1:
     #   a [-|-----|-----|-----|-...-|----]
     #   b   [-----|-----|-----|-...-|--]
-
-    def limit():
-        return matches[0][0] * 2
 
     # combine channels for grouping since they are correlated anyway
     am = np.sum(ax, axis=1, dtype=ax.dtype)
@@ -69,14 +66,15 @@ def _cmp_right(ax, bx, offset_bound, matches):
             # *c is common (overlapping) part
             agc = ag[i:][:len(bg)]
             bgc = bg[:len(ag)-i]
-            dsg = _limited_ds(agc, bgc, limit())
+            dsg = _limited_ds(agc, bgc, limit[0])
             if dsg is not None:
                 ac = ax[offset:][:len(bx)]
                 bc = bx[:len(ax)-offset]
-                ds = _limited_ds(ac, bc, limit())
+                ds = _limited_ds(ac, bc, limit[0])
                 if ds is not None:
                     bisect.insort(matches, (ds, offset))
-                    while matches[-1][0] > limit(): # make sure to keep ds=0
+                    limit[0] = matches[0][0] * 2
+                    while matches[-1][0] > limit[0]: # make sure to keep ds=0
                         matches.pop()
 
 def cmp_track(a, b, offset=None, threshold=None, skip=None):
@@ -111,14 +109,13 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
     ax = a.data_wider()
     bx = b.data_wider()
     total = min(ax.size, bx.size) # fixed denominator regardless of overlap
-    limit = int(a.data_high * total * threshold) # absolute threshold
+    limit = [int(a.data_high * total * threshold)] # absolute threshold
+    matches = [] # [(SAD, offset)], ordered
 
-    matches = [(limit // 2, None)] # [pairs of (SAD, offset)]
-    _cmp_right(bx, ax, offset_bound, matches)
+    _cmp_right(bx, ax, offset_bound, limit, matches)
     # mirror; remove 0 offset from first call, second call will add it again
-    matches = [(ds, -offset if offset else None) for ds, offset in matches]
-    _cmp_right(ax, bx, offset_bound, matches)
-    matches = ((ds, offset) for ds, offset in matches if offset is not None)
+    matches = [(ds, -offset) for ds, offset in matches if offset]
+    _cmp_right(ax, bx, offset_bound, limit, matches)
     # sort for ordered offset for equal MAD, offset=0 is best
     matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))
     for ds, offset in matches:
