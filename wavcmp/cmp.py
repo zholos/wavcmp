@@ -57,7 +57,9 @@ def _cmp_right(ax, bx, offset_bound, matches):
     for shift in xrange(group):
         ag = _group_sums(am[shift:], group)
 
-        for offset in xrange(shift, offset_bound+1, group):
+        for i in xrange((offset_bound-shift)//group+1):
+            offset = i*group+shift
+
             # TODO: adjust range to conditions instead of checking every loop
             if offset > len(ax): # include test at zero overlap for completeness
                 continue
@@ -65,8 +67,8 @@ def _cmp_right(ax, bx, offset_bound, matches):
                 continue
 
             # *c is common (overlapping) part
-            agc = ag[offset//group:][:len(bg)]
-            bgc = bg[:len(ag)-offset//group]
+            agc = ag[i:][:len(bg)]
+            bgc = bg[:len(ag)-i]
             dsg = _limited_ds(agc, bgc, limit())
             if dsg is not None:
                 ac = ax[offset:][:len(bx)]
