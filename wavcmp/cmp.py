@@ -3,6 +3,11 @@ import numpy as np
 
 from .match import _sum, Match, MatchSequence
 
+try:
+    xrange
+except NameError:
+    xrange = range
+
 def _group_sums(a, group):
     assert a.ndim == 1
     a = a[:len(a)//group*group]
@@ -137,8 +142,8 @@ def cmp_album(a, b, skip=None, **options):
     at = list(a.tracks)
     bt = list(b.tracks)
     while True:
-        for i, j in sorted(itertools.product(range(min(len(at), skip+1)),
-                                             range(min(len(bt), skip+1))),
+        for i, j in sorted(itertools.product(xrange(min(len(at), skip+1)),
+                                             xrange(min(len(bt), skip+1))),
                            key=lambda x: (sum(x), abs(x[0]-x[1]), x[0]>x[1])):
             matches = list(cmp_track(at[i], bt[j], **options))
             if matches:

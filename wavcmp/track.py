@@ -39,7 +39,7 @@ class Track(Audio):
         # with either the requested section (valid Track) or "error" (keep as
         # File).
         try:
-            probe = json.loads(out)
+            probe = json.loads(out.decode("ascii", "replace"))
         except ValueError:
             probe = {} # RuntimeError later
         if "error" in probe: # ret != 0 in this case
