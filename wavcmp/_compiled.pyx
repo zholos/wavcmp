@@ -5,7 +5,16 @@ cimport cython
 cimport numpy as np
 
 DEF step = 1<<15 # larger than in baseline because we can check limit mid-step
-DEF window = 128
+
+cdef extern from "_sse.h":
+    cdef int _sse_window
+    int _wds_sse(np.int32_t* a, np.int32_t* b) nogil
+
+# Defines from C headers aren't Cython constants, so can't be used for
+# conditional compilation. An inline function is a better representation of a
+# C constant than a global variable, which is assigned at module import.
+cdef inline unsigned window() nogil:
+    return _sse_window or 128
 
 ctypedef unsigned long long uint64
 cdef extern from "limits.h":
@@ -46,15 +55,20 @@ cdef uint64 _lds_run(np.int32_t* ac, np.int32_t* bc, size_t size,
 
         # Sum over smaller fixed-size windows without checking limit,
         # to allow unrolling and vectorization.
-        w = m - m % window
-        for j in xrange(0, w, window):
-            t = 0
-            for k in xrange(window):
-                d = ai[j+k] - bi[j+k]
-                t += d if d>0 else -d # abs() is more complex
-            s += t
+        w = m - m % window()
+        j = 0
+        while j < w: # window isn't a Cython constant, can't be range step
+            if _sse_window:
+                s += _wds_sse(&ai[j], &bi[j])
+            else:
+                t = 0
+                for k in xrange(window()): # but window can be a range endpoint
+                    d = ai[j+k] - bi[j+k]
+                    t += d if d>0 else -d # abs() is more complex
+                s += t
             if s > limit:
                 return s
+            j += window()
 
         for j in xrange(w, m):
             d = ai[j] - bi[j]
@@ -114,4 +128,7 @@ def cmp_candidates(np.int32_t[::1] ag, np.int32_t[::1] bg,
                 with gil:
                     limit = check_match(i)
 
-algorithm = "Cython"
+if _sse_window:
+    algorithm = "Cython+SSE"
+else:
+    algorithm = "Cython"

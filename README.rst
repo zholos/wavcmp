@@ -8,7 +8,7 @@ absolute differences between samples.
 Run ``wavcmp.py`` from the source directory or install it (with optimizations if
 Cython is available) using ``pip``::
 
-    pip install [--user] .
+    [CFLAGS=-march=native] pip install [--user] .
 
 
 Algorithm
@@ -57,3 +57,10 @@ is encapsulated in ``_cmp_candidates()``. The same is true of ``_limited_ds()``.
 Both these routines can be significantly optimized by using Cython to convert
 them to C. Optimized versions of these routines are provided in the
 ``_compiled`` module and imported conditionally if Cython is available.
+
+The inner loop of the Cython version of ``_limited_ds()`` is a very simple
+calculation over fixed-size chunks of data that can be vectorized using SIMD
+instructions. This isn't done automatically by compilers, so a pure-C (not
+Cythonized) vectorized version using SSE2 and SSSE3 intrinsics is provided in
+``_sse.h``. This is used automatically if the intrinsics are available, e.g.
+when using the ``-march=native`` compiler flag on modern CPUs.
