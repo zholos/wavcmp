@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import sys, argparse
 
-from . import __version__, SilenceableError, File, Audio
+from . import __version__, _algorithm, SilenceableError, File, Audio
 
 def main():
     parser = argparse.ArgumentParser(
@@ -13,7 +13,8 @@ def main():
 
     parser.add_argument("-h", "--help", action="help", help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version",
-                        version="%(prog)s {}".format(__version__),
+                        version="%(prog)s {} ({})".format(
+                            __version__, ", ".join([_algorithm])),
                         help=argparse.SUPPRESS)
     parser.add_argument("-o", metavar="offset", type=float,
                         help="maximum offset, default 0.5 seconds")

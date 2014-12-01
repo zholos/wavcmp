@@ -5,7 +5,8 @@ This program compares two audio files to determine if their waveforms closely
 match, allowing for a relative time offset. The difference metric is the sum of
 absolute differences between samples.
 
-Run ``wavcmp.py`` from the source directory or install it using ``pip``::
+Run ``wavcmp.py`` from the source directory or install it (with optimizations if
+Cython is available) using ``pip``::
 
     pip install [--user] .
 
@@ -49,3 +50,10 @@ are calculated once, the group sums for the other track are calculated for each
 relative shift. This is the complex part of ``cmp_track()``. Group size is
 chosen empirically. Smaller groups give a better lower bound while larger groups
 mean less data to process.
+
+After the group alignment is handled and the group sums are prepared, the actual
+search involves a straightforward loop with integer variables and arrays. This
+is encapsulated in ``_cmp_candidates()``. The same is true of ``_limited_ds()``.
+Both these routines can be significantly optimized by using Cython to convert
+them to C. Optimized versions of these routines are provided in the
+``_compiled`` module and imported conditionally if Cython is available.

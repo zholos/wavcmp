@@ -47,6 +47,17 @@ def _cmp_candidates(ag, bg, start, stop, limit, check_match):
         if dsg is not None:
             limit = check_match(i) # simpler than yield
 
+_algorithm = "Python"
+
+try:
+    from . import _compiled # optimized Cython routines
+except ImportError:
+    pass
+else:
+    _limited_ds = _compiled.limited_ds
+    _cmp_candidates = _compiled.cmp_candidates
+    _algorithm = _compiled.algorithm
+
 def cmp_track(a, b, offset=None, threshold=None, skip=None):
     """Compare two tracks at different offsets and yields good matches.
 
@@ -120,8 +131,10 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
     am = np.sum(ax, axis=1, dtype=ax.dtype)
     bm = np.sum(bx, axis=1, dtype=bx.dtype)
 
-    group = 59 # chosen empirically; best value probably depends on sample rate,
-               # track frequences, and cache size
+    # Group size chosen empirically. Best value probably depends on sample rate,
+    # track frequences, and cache size. Check for possibility of overflow when
+    # summing samples in baseline and optimized _limited_ds() before increasing.
+    group = 59
     bg = _group_sums(bm, group)
 
     # First shift iteration covers offset=0, so if tracks are identical, limit
