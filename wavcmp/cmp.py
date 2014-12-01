@@ -1,4 +1,4 @@
-import bisect, itertools
+import bisect, itertools, multiprocessing.dummy, contextlib
 import numpy as np
 
 from .match import _sum, Match, MatchSequence
@@ -48,6 +48,7 @@ def _cmp_candidates(ag, bg, start, stop, limit, check_match):
             limit = check_match(i) # simpler than yield
 
 _algorithm = "Python"
+_use_threads = False
 
 try:
     from . import _compiled # optimized Cython routines
@@ -57,8 +58,9 @@ else:
     _limited_ds = _compiled.limited_ds
     _cmp_candidates = _compiled.cmp_candidates
     _algorithm = _compiled.algorithm
+    _use_threads = True
 
-def cmp_track(a, b, offset=None, threshold=None, skip=None):
+def cmp_track(a, b, offset=None, threshold=None, skip=None, threads=None):
     """Compare two tracks at different offsets and yields good matches.
 
     The difference metric is the sum of absolute differences (SAD) over the
@@ -92,6 +94,7 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
     total = min(ax.size, bx.size) # fixed denominator regardless of overlap
     limit = [int(a.data_high * total * threshold)] # absolute threshold
     matches = [] # [(SAD, offset)], ordered
+    mutex = multiprocessing.dummy.Lock()
 
     # Exact check, called for only a few candidates by heuristic algorithm.
     def check_match(offset):
@@ -100,10 +103,11 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
         bc = bx[max(0, -offset):][:len(ax)-max(0, offset)]
         ds = _limited_ds(ac, bc, limit[0])
         if ds is not None:
-            bisect.insort(matches, (ds, offset))
-            limit[0] = matches[0][0] * 2
-            while matches[-1][0] > limit[0]: # make sure to keep ds=0
-                matches.pop()
+            with mutex:
+                bisect.insort(matches, (ds, offset))
+                limit[0] = matches[0][0] * 2 # assuming assign is atomic
+                while matches[-1][0] > limit[0]: # make sure to keep ds=0
+                    matches.pop()
         return limit[0]
 
     # Match offset is delay of b start from a start:
@@ -139,7 +143,7 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
 
     # First shift iteration covers offset=0, so if tracks are identical, limit
     # becomes 0 which speeds up the rest of the search.
-    for shift in xrange(group):
+    def iteration(shift):
         ag = _group_sums(am[shift:], group)
 
         # Range derived from this condition:
@@ -148,6 +152,12 @@ def cmp_track(a, b, offset=None, threshold=None, skip=None):
         stop = (max_offset-shift)//group+1
         _cmp_candidates(ag, bg, start, stop, limit[0],
                         lambda i: check_match(i*group+shift))
+
+    if _use_threads and threads != 0: # None means automatic
+        with contextlib.closing(multiprocessing.dummy.Pool(threads)) as pool:
+            list(pool.map(iteration, xrange(group), chunksize=1))
+    else:
+        list(map(iteration, xrange(group)))
 
     # sort for ordered offset for equal MAD, offset=0 is best
     matches = sorted(matches, key=lambda x: (x[0], abs(x[1]), x[1]<0))

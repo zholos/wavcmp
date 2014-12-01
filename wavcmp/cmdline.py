@@ -22,6 +22,8 @@ def main():
                         help="match threshold, default 1%%")
     parser.add_argument("-k", metavar="skip", type=int,
                         help="max skipped album tracks, default 0")
+    parser.add_argument("-T", metavar="threads", type=int,
+                        help="number of worker threads, defaults to CPU count")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-v", action="store_true",
                        help="verbose match display")
@@ -48,7 +50,8 @@ def main():
             raise SilenceableError(
                 "Sample rates different in files: "
                 "'{}' and '{}'".format(a.filename, b.filename))
-        matches = a.cmp(b, offset=args.o, threshold=args.t, skip=args.k)
+        matches = a.cmp(b, offset=args.o, threshold=args.t, skip=args.k,
+                           threads=args.T)
 
         matched = False
         for match in matches:

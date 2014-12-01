@@ -64,3 +64,12 @@ instructions. This isn't done automatically by compilers, so a pure-C (not
 Cythonized) vectorized version using SSE2 and SSSE3 intrinsics is provided in
 ``_sse.h``. This is used automatically if the intrinsics are available, e.g.
 when using the ``-march=native`` compiler flag on modern CPUs.
+
+Using Cython provides an additional benefit. The entire loop that calculates
+lower bounds is run with the GIL released (it is only reacquired to test a few
+candidate matches using the actual metric), so they can be parallelized using
+Python threads. In this case when a match is found, the decreased threshold
+isn't propagated immediately to other threads, so the total search work is
+increased, but wall clock time is decreased substantially. This is a
+particularly good parallelization point because all CPU cores can share the
+track data in cache.
