@@ -99,7 +99,8 @@ def limited_ds(np.ndarray[np.int32_t, ndim=2] ac,
     for channel in xrange(ac.shape[1]):
         ar = ac[:,channel]
         br = bc[:,channel]
-        s = _lds_run(&ar[0], &br[0], ac.shape[0], &_, limit)
+        with nogil:
+            s = _lds_run(&ar[0], &br[0], ac.shape[0], &_, limit)
         if s > limit:
             return
         limit -= s
