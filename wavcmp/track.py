@@ -147,7 +147,7 @@ class Track(Audio):
         # Converting to a larger type avoids overflow in the first two cases;
         # the third case requires a different type.
         # "F" layout better for operations on specific channels.
-        return np.asarray(self.data(), dtype=np.int32, order="F")
+        return self.data().astype(np.int32, order="F")
 
     def cmp(self, other, **options):
         if not isinstance(other, Track):
