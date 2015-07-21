@@ -51,7 +51,9 @@ cdef uint64 _lds_run(np.int32_t* ac, np.int32_t* bc, size_t size,
     while True:
         ai = &ac[i*step]
         bi = &bc[i*step]
-        m = min(step, size-i*step)
+
+        # size may be slightly smaller than passed to _lds_init() so m may be 0.
+        m = min(step, size-min(size, i*step))
 
         # Sum over smaller fixed-size windows without checking limit,
         # to allow unrolling and vectorization.
