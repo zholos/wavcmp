@@ -42,5 +42,5 @@ setup(
     entry_points={
         "console_scripts": ["wavcmp=wavcmp.cmdline:main"]
     },
-    install_requires=["numpy", "scipy"]
+    install_requires=["numpy"]
 )

@@ -1,5 +1,4 @@
-import os, os.path, tempfile, subprocess, json, warnings
-import scipy.io.wavfile
+import os, os.path, subprocess, struct, json, warnings
 import numpy as np
 
 from .cmp import cmp_track, cmp_album
@@ -111,24 +110,19 @@ class Track(Audio):
     duration_accuracy = 1 # +/- seconds
 
     def _read_data(self):
-        with tempfile.NamedTemporaryFile(suffix=".wav") as temp:
-            subprocess.check_call(
-                ["ffmpeg", "-v", "quiet", "-i", self.filename,
-                    "-f", "wav", "-y", temp.name],
-                stdin=open(os.devnull, "r"))
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                # WavFileWarning because "fmt" chunk is size 18,
-                # as ffmpeg always outputs it
-                rate, data = scipy.io.wavfile.read(temp.name)
-
-        assert data.ndim == 2
+        out = subprocess.check_output(
+            ["ffmpeg", "-v", "quiet", "-i", self.filename,
+                    "-f", "au", "-acodec", "pcm_s16be", "pipe:"],
+            stdin=open(os.devnull, "r"), bufsize=-1)
+        magic, offset, _, codec, rate, channels = struct.unpack(">6I", out[:24])
+        assert magic == 0x2e736e64 and codec == 3 and offset > 24
+        data = np.frombuffer(out, offset=offset, dtype=">i2")
+        data = data.reshape((-1, channels)).astype(np.int16, order="F")
         if rate != self.rate or data.shape[1] != 2 or \
                 abs(data.shape[0] - self.duration) > \
                 self.duration_accuracy * rate:
             raise RuntimeError(
                 "Data didn't match probe on file: '{}'".format(self.filename))
-        assert data.dtype == np.int16
         return data
 
     def data(self):
